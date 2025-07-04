@@ -709,7 +709,7 @@ function Section:AddDropdown(text, options, callback)
 
     -- Dropdown list container (ANA GUI'E BAĞLI)
     local listContainer = Create("ScrollingFrame", {
-        Parent = Gui, -- DÜZELTME: Ana GUI'e bağlandı
+        Parent = Gui,
         Size = UDim2.new(0, 0, 0, 0),
         BackgroundColor3 = Themes.Default.DropdownBG,
         BorderSizePixel = 0,
@@ -748,17 +748,24 @@ function Section:AddDropdown(text, options, callback)
         local buttonSize = arrowBtn.AbsoluteSize
         
         -- Dropdown genişliği
-        local dropdownWidth = math.max(container.AbsoluteSize.X, 150)
+        local dropdownWidth = container.AbsoluteSize.X -- Container genişliği ile aynı
         
         -- Ekran boyutları
         local screenSize = workspace.CurrentCamera.ViewportSize
         
-        -- Pozisyon hesapla
-        local posX = buttonPos.X + buttonSize.X/2 - dropdownWidth/2
+        -- Pozisyon hesapla: Butonun sol alt köşesi
+        local posX = buttonPos.X - (dropdownWidth - buttonSize.X)
         local posY = buttonPos.Y + buttonSize.Y
         
-        -- Sınır kontrolleri
-        posX = math.clamp(posX, 0, screenSize.X - dropdownWidth)
+        -- Sınır kontrolleri (sol)
+        if posX < 0 then
+            posX = 0
+        end
+        
+        -- Sınır kontrolleri (sağ)
+        if posX + dropdownWidth > screenSize.X then
+            posX = screenSize.X - dropdownWidth
+        end
         
         -- Yeterli alan yoksa yukarı aç
         local dropdownHeight = math.min(#options * 26, 120)
@@ -866,7 +873,8 @@ function Section:AddDropdown(text, options, callback)
         if open and input.UserInputType == Enum.UserInputType.MouseButton1 then
             local mousePos = input.Position
             if not listContainer.AbsoluteRect:ContainsPoint(mousePos) and 
-               not arrowBtn.AbsoluteRect:ContainsPoint(mousePos) then
+               not arrowBtn.AbsoluteRect:ContainsPoint(mousePos) and
+               not container.AbsoluteRect:ContainsPoint(mousePos) then
                 closeDropdown()
             end
         end
