@@ -1,3 +1,4 @@
+
 local Library = {}
 Library.__index = Library
 
@@ -56,7 +57,60 @@ local Themes = {
         OwnerTagText = Color3.fromRGB(180, 180, 180),
         CloseBtnHover = Color3.fromRGB(255, 100, 100)
     }
+    Light = {
+        Background    = Color3.fromRGB(240,240,240),
+        Section       = Color3.fromRGB(220,220,220),
+        Text          = Color3.fromRGB(20,20,20),
+        Accent        = Color3.fromRGB(0,120,215),
+        Hover         = Color3.fromRGB(200,200,200),
+        ToggleOn      = Color3.fromRGB(0,180,0),
+        ToggleOff     = Color3.fromRGB(180,0,0),
+        DropdownBG    = Color3.fromRGB(255,255,255),
+        SliderFill    = Color3.fromRGB(0,120,215),
+        TextBoxBG     = Color3.fromRGB(255,255,255),
+        ButtonBG      = Color3.fromRGB(230,230,230),
+        OwnerTagBG    = Color3.fromRGB(200,200,200),
+        OwnerTagText  = Color3.fromRGB(20,20,20),
+        CloseBtnHover = Color3.fromRGB(255,0,0)
+    },
 }
+
+-- Library içine:
+-- EmirGuiLib.lua içinde, return Library’dan hemen önce ekle:
+
+-- Dinamik tema değiştirme metodu
+function Library:SetTheme(name)
+    assert(Themes[name], "Böyle bir tema yok: "..tostring(name))
+    -- Seçilen temayı Default olarak ata
+    Themes.Default = Themes[name]
+
+    -- Mevcut tüm EmirGuiLib GUI elementlerini güncelle
+    for _, instance in ipairs(Gui:GetDescendants()) do
+        -- Frame arkaplanları
+        if instance:IsA("Frame") then
+            -- TitleBar, ContentArea, Container vb.
+            instance.BackgroundColor3 = (instance == instance.Parent and Themes.Default.Section) or Themes.Default.Background
+        end
+        -- Buton arkaplanları
+        if instance:IsA("TextButton") then
+            instance.BackgroundColor3 = Themes.Default.ButtonBG or Themes.Default.Section
+            instance.TextColor3       = Themes.Default.Text
+        end
+        -- Label’lerin metin renkleri
+        if instance:IsA("TextLabel") then
+            instance.TextColor3 = Themes.Default.Text
+        end
+        -- ScrollingFrame (scrollbar) renkleri
+        if instance:IsA("ScrollingFrame") then
+            instance.ScrollBarImageColor3 = Themes.Default.Accent
+        end
+        -- Diğer widget’ların iç renkleri
+        -- (toggle, slider fill, dropdown bg vb. kullanıldıkları yerde otomatik)
+    end
+end
+
+
+
 
 local Gui = Create("ScreenGui", {Name = "EmirGuiLib", ResetOnSpawn = false})
 Gui.Parent = CoreGui
@@ -1195,6 +1249,33 @@ function Library:CreateWindow(title, ownerName)
     local window = Window:new(title, ownerName)
     return window
 end
+-- DSL Overrides Begin
+local _origCreateWindow = Library.CreateWindow
+function Library:CreateWindow(title, ownerName)
+    local win = _origCreateWindow(self, title, ownerName)
+    setmetatable(win, {__index = Window})
+    return win
+end
+
+function Window:Section(name, options)
+    return self:AddSection(name, options)
+end
+
+-- Make DSL
+Make = setmetatable({}, {
+    __index = function(_, key)
+        local s = tostring(key)
+        if s:match("Window$") then
+            return function(_, title, ownerName)
+                local win = Library:CreateWindow(title, ownerName)
+                _G[s] = win
+                return win
+            end
+        end
+    end
+})
+-- DSL Overrides End
+
 
 setmetatable(Library, {
     __call = function(_, title, ownerName)
@@ -1203,21 +1284,38 @@ setmetatable(Library, {
 })
 
 -- Library tablosuna Notify fonksiyonunu ekle (sağ alt için güncellendi)
-function Library:Notify(title, message, duration, callback)
+-- 1. Library içine GUI referansı eklenmeli
+local Gui = Create("ScreenGui", {Name = "EmirGuiLib", ResetOnSpawn = false})
+Gui.Parent = CoreGui
+Library.Gui = Gui -- BU SATIR EKLENDİ
+
+-- Devamında gelen kod olduğu gibi bırakılır
+
+-- Bildirim fonksiyonunun içi, renkli tür destekli şekilde güncellendi:
+function Library:Notify(title, message, type, duration, callback)
     duration = duration or 5
-    
-    -- Bildirim konteyneri oluştur (yoksa) - SAĞ ALT KÖŞE
+    type = (type or "info"):lower()
+
+    local theme = Themes.Default
+    local colors = {
+        info    = theme.Accent,
+        warn    = Color3.fromRGB(255, 170, 0),
+        error   = Color3.fromRGB(255, 80, 80),
+        success = Color3.fromRGB(80, 220, 100),
+        badge   = Color3.fromRGB(120, 90, 255)
+    }
+    local color = colors[type] or theme.Accent
+
     if not Gui:FindFirstChild("NotificationContainer") then
         local container = Create("Frame", {
             Name = "NotificationContainer",
             Parent = Gui,
-            Position = UDim2.new(1, -10, 1, -10), -- Sağ alt köşe
+            Position = UDim2.new(1, -10, 1, -10),
             Size = UDim2.new(0, 320, 0, 0),
             BackgroundTransparency = 1,
             ClipsDescendants = true,
             ZIndex = 200
         })
-        
         Create("UIListLayout", {
             Parent = container,
             SortOrder = Enum.SortOrder.LayoutOrder,
@@ -1225,31 +1323,28 @@ function Library:Notify(title, message, duration, callback)
             VerticalAlignment = Enum.VerticalAlignment.Bottom
         })
     end
-    
+
     local container = Gui.NotificationContainer
-    local theme = Themes.Default
-    
-    -- Bildirim çerçevesi
+
     local notification = Create("Frame", {
         LayoutOrder = #container:GetChildren(),
-        BackgroundColor3 = theme.Section,
+        BackgroundColor3 = color,
         Size = UDim2.new(1, 0, 0, 0),
-        Position = UDim2.new(1, 0, 1, 0), -- Başlangıçta sağ dışında ve altta
-        AnchorPoint = Vector2.new(1, 1), -- Sağ alt köşe
+        Position = UDim2.new(1, 0, 1, 0),
+        AnchorPoint = Vector2.new(1, 1),
         ClipsDescendants = true,
         ZIndex = 201
     })
-    
+
     local corner = Instance.new("UICorner", notification)
     corner.CornerRadius = UDim.new(0, 8)
-    
-    -- İçerik düzeni
+
     local layout = Create("UIListLayout", {
         Parent = notification,
         SortOrder = Enum.SortOrder.LayoutOrder,
         Padding = UDim.new(0, 8)
     })
-    
+
     local padding = Create("UIPadding", {
         Parent = notification,
         PaddingTop = UDim.new(0, 12),
@@ -1257,11 +1352,10 @@ function Library:Notify(title, message, duration, callback)
         PaddingLeft = UDim.new(0, 16),
         PaddingRight = UDim.new(0, 16)
     })
-    
-    -- Başlık
+
     local titleLabel = Create("TextLabel", {
         Text = title,
-        TextColor3 = theme.Text,
+        TextColor3 = Color3.new(1,1,1),
         Font = Enum.Font.GothamBold,
         TextSize = 16,
         BackgroundTransparency = 1,
@@ -1272,11 +1366,10 @@ function Library:Notify(title, message, duration, callback)
         ZIndex = 202
     })
     titleLabel.Parent = notification
-    
-    -- Mesaj
+
     local messageLabel = Create("TextLabel", {
         Text = message,
-        TextColor3 = Color3.new(0.8, 0.8, 0.8),
+        TextColor3 = Color3.fromRGB(230,230,230),
         Font = Enum.Font.Gotham,
         TextSize = 14,
         BackgroundTransparency = 1,
@@ -1287,68 +1380,61 @@ function Library:Notify(title, message, duration, callback)
         ZIndex = 202
     })
     messageLabel.Parent = notification
-    
-    -- İlerleme çubuğu
+
     local progressBar = Create("Frame", {
         Size = UDim2.new(1, 0, 0, 3),
-        BackgroundColor3 = theme.Accent,
+        BackgroundColor3 = Color3.new(1,1,1),
         BorderSizePixel = 0,
         LayoutOrder = 3,
         ZIndex = 203
     })
     progressBar.Parent = notification
-    
-    -- Boyutları güncelle
+
     local function updateSizes()
         titleLabel.Size = UDim2.new(1, 0, 0, titleLabel.TextBounds.Y)
         messageLabel.Size = UDim2.new(1, 0, 0, messageLabel.TextBounds.Y)
-        
         layout:GetPropertyChangedSignal("AbsoluteContentSize"):Wait()
         notification.Size = UDim2.new(1, 0, 0, layout.AbsoluteContentSize.Y)
     end
-    
-    -- Başlangıç animasyonu (SAĞ ALT KÖŞE)
+
     notification.Parent = container
     task.spawn(updateSizes)
-    
-    -- Bildirimi içeri kaydır (sağ alttan sağ alt köşeye)
+
     Tween(notification, {
         Position = UDim2.new(1, -10, 1, -10)
     }, 0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-    
-    -- İlerleme animasyonu
+
     Tween(progressBar, {
         Size = UDim2.new(0, 0, 0, 3)
     }, duration, Enum.EasingStyle.Linear, Enum.EasingDirection.In)
-    
-    -- Otomatik kapanma
+
     task.delay(duration, function()
         if notification.Parent then
             Tween(notification, {
                 Position = UDim2.new(1, 0, 1, 0)
             }, 0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
-            
             wait(0.5)
             notification:Destroy()
             if callback then pcall(callback) end
         end
     end)
-    
-    -- Manuel kapatma
+
     notification.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             Tween(notification, {
                 Position = UDim2.new(1, 0, 1, 0)
             }, 0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-            
             wait(0.3)
             notification:Destroy()
             if callback then pcall(callback) end
         end
     end)
-    
+
     return notification
 end
+
+    
+
 
 -- Window objesine de Notify fonksiyonunu ekle
 Window.Notify = function(self, ...)
@@ -1419,4 +1505,4 @@ function Section:AddLabel(text)
     return label
 end
 
-return Library
+return Library 
